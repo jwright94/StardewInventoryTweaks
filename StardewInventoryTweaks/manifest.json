@@ -1,0 +1,10 @@
+﻿{
+  "Name": "Stardew Inventory Tweaks",
+  "Author": "jwright94",
+  "Version": "1.0.0",
+  "Description": "TODO",
+  "UniqueID": "jwright.invtweaks",
+  "EntryDll": "StardewInventoryTweaks.dll",
+  "MinimumApiVersion": "2.0",
+  "UpdateKeys": []
+}
