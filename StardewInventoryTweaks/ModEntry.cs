@@ -12,16 +12,12 @@ namespace StardewInventoryTweaks
 {
     public class ModEntry : Mod
     {
-        private class RemovedItem
-        {
-            public Item Item;
-            public int? Slot;
-        }
-
         private GameMenu gameMenu;
         private InventoryPage inventoryPage;
 
         private IReflectedField<Item> heldItemReflectedField;
+
+        private InventoryWatcher inventoryWatcher;
 
         private Item HeldItem
         {
@@ -31,9 +27,8 @@ namespace StardewInventoryTweaks
         public override void Entry(IModHelper helper)
         {
             SaveEvents.AfterLoad += SaveEvents_AfterLoad;
-            PlayerEvents.InventoryChanged += PlayerEventsOnInventoryChanged;
-            GameEvents.UpdateTick += GameEventsOnUpdateTick;
-            
+            GameEvents.SecondUpdateTick += GameEventsOnUpdateTick;
+
             MenuEvents.MenuChanged += MenuEventsOnMenuChanged;
             //GameEvents
             Monitor.Log("Ayy mod loaded");
@@ -41,17 +36,20 @@ namespace StardewInventoryTweaks
 
         private void MenuEventsOnMenuChanged(object sender, EventArgsClickableMenuChanged eventArgsClickableMenuChanged)
         {
+            // If the player opens a 
             if (Game1.activeClickableMenu is GameMenu menu)
             {
                 var pages = this.Helper.Reflection.GetField<List<IClickableMenu>>(menu, "pages").GetValue();
                 var page = pages[menu.currentTab];
 
-                // Example for getting the MapPage
+                // Try and get a copy of the inventory page
                 inventoryPage = pages[menu.currentTab] as InventoryPage;
                 heldItemReflectedField = null;
-
+                
+                // Check if we actually got one
                 if (inventoryPage != null)
                 {
+                    // Save a reference to inventoryPage.heldItem
                     heldItemReflectedField = Helper.Reflection.GetField<Item>(inventoryPage, "heldItem");
                     Monitor.Log("Inventory page acquired!");
                 }
@@ -60,8 +58,14 @@ namespace StardewInventoryTweaks
 
         private void SaveEvents_AfterLoad(object sender, EventArgs e)
         {
-            // Create the inventory table on startup
-            RebuildInventoryTable();
+            inventoryWatcher = new InventoryWatcher(Game1.player.Items);
+
+            inventoryWatcher.OnInventoryChange += OnInventoryChanged;
+        }
+
+        private void OnItemRemove(ItemPos item)
+        {
+
         }
 
         private void DumpInventory()
@@ -81,75 +85,44 @@ namespace StardewInventoryTweaks
         }
 
         // A dictionary that holds item positions so I can find what location they were removed from
-        private Dictionary<Item, int> inventoryTable = new Dictionary<Item, int>();
-
-        private Queue<RemovedItem> removedItemQueue = new Queue<RemovedItem>();
-
-        private void RebuildInventoryTable()
-        {
-            inventoryTable.Clear();
-            
-            // for each item
-            foreach (var item in Game1.player.Items)
-            {
-                if (item == null)
-                    continue;
-
-                var itemIndex = Game1.player.getIndexOfInventoryItem(item);
-                inventoryTable[item] = itemIndex;
-            }
-        }
-
-        private int? GetRemovedItemSlot(Item item)
-        {
-            int index;
-            if (inventoryTable.TryGetValue(item, out index))
-                return index;
-
-            return null;
-        }
         
 
-        private void PlayerEventsOnInventoryChanged(object sender, EventArgsInventoryChanged eventArgsInventoryChanged)
+        private Queue<ItemPos> removedItemQueue = new Queue<ItemPos>();
+
+        private void OnInventoryChanged()
         {
             Monitor.Log("Inventory Event!");
-            Monitor.Log($"Added: {eventArgsInventoryChanged.Added.Count}");
-            Monitor.Log($"Removed: {eventArgsInventoryChanged.Removed.Count}");
+            Monitor.Log($"Added: {inventoryWatcher.Added.Count}");
+            Monitor.Log($"Removed: {inventoryWatcher.Removed.Count}");
+            Monitor.Log($"Moved: {inventoryWatcher.Moved.Count}");
 
             // Check if something was removed
-            if (eventArgsInventoryChanged.Removed.Count > 0)
+            if (inventoryWatcher.Removed.Count > 0)
             {
-                var evnt = eventArgsInventoryChanged.Removed.First();
-                var removedItem = new RemovedItem()
-                {
-                    Item = evnt.Item,
-                    Slot = GetRemovedItemSlot(evnt.Item)
-                };
-                
-                removedItemQueue.Enqueue(removedItem);
+                foreach (var removedItem in inventoryWatcher.Removed)
+                    removedItemQueue.Enqueue(removedItem);
             }
-            else RebuildInventoryTable();
         }
         
-        private void HandleRemovedItem(RemovedItem removedItem)
+        private void HandleRemovedItem(ItemPos itemPos)
         {
             // if the player is holding the item in the UI don't replace it
-            if (HeldItem == removedItem.Item)
+            if (HeldItem == itemPos.Item)
                 return;
 
             // should always be true but you never know
-            if (!removedItem.Slot.HasValue)
+            if (!itemPos.Slot.HasValue)
                 return;
 
-            Monitor.Log($"Removed {removedItem.Item.Stack}x {removedItem.Item.DisplayName} from inventory {removedItem.Slot}");
+            Monitor.Log($"Removed {itemPos.Item.Stack}x {itemPos.Item.DisplayName} from inventory {itemPos.Slot}");
 
             
             // Make sure the item was in the hotbar and the slot is currently empty
             // Prevents item replace on item swap
-            if (removedItem.Slot < 12 && Game1.player.Items[removedItem.Slot.Value] == null)
+            if (itemPos.Slot < 12 && Game1.player.Items[itemPos.Slot.Value] == null)
             {
                 // Find if theres anything similar to replace it with
-                var similarItems = ItemSimilarity.GetSimilarItems(removedItem.Item, Game1.player.Items);
+                var similarItems = ItemSimilarity.GetSimilarItems(itemPos.Item, Game1.player.Items);
                 var mostSimilarItem = similarItems.FirstOrDefault();
                 
                 Monitor.Log("=========================================================");
@@ -162,12 +135,9 @@ namespace StardewInventoryTweaks
                 {
                     // Replace the item
                     MoveInventoryItem(Game1.player.getIndexOfInventoryItem(mostSimilarItem.Item),
-                        removedItem.Slot.Value);
+                        itemPos.Slot.Value);
                 }
             }
-
-            // Update the inventory table
-            RebuildInventoryTable();
         }
 
         private void HandleRemovedItems()
@@ -187,6 +157,7 @@ namespace StardewInventoryTweaks
 
         private void GameEventsOnUpdateTick(object sender, EventArgs eventArgs)
         {
+            inventoryWatcher?.Update();
             if(removedItemQueue.Count > 0)
                 HandleRemovedItems();
         }
