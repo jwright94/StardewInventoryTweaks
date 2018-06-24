@@ -67,9 +67,15 @@ namespace StardewInventoryTweaks
             movedItems.Clear();
 
             // Add removed items
-            removedItems.AddRange(previousItems
-                .Except(Inventory)
-                .Select(x => new ItemPos(x, inventoryPositionTable[x])));
+            var itemExceptions = previousItems.Except(Inventory);
+
+            foreach (var removedItem in itemExceptions)
+            {
+                if (removedItem != null && inventoryPositionTable.TryGetValue(removedItem, out var itemPos))
+                {
+                    removedItems.Add(new ItemPos(removedItem, itemPos));
+                }
+            }
 
             if (removedItems.Count > 0)
                 shouldUpdate = true;
@@ -85,7 +91,6 @@ namespace StardewInventoryTweaks
                 if (item != prevItem)
                 {
                     // Something has changed
-
                     if (item != null)
                     {
                         shouldUpdate = true;
