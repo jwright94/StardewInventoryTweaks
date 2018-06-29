@@ -46,6 +46,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="InventoryUIHelper.cs" />
     <Compile Include="InventoryWatcher.cs" />
     <Compile Include="ItemPos.cs" />
     <Compile Include="ItemSimilarity.cs" />

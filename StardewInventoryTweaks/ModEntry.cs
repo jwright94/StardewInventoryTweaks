@@ -12,60 +12,32 @@ namespace StardewInventoryTweaks
 {
     public class ModEntry : Mod
     {
-        private GameMenu gameMenu;
-        private InventoryPage inventoryPage;
-
-        private IReflectedField<Item> heldItemReflectedField;
-
         private InventoryWatcher inventoryWatcher;
+        private InventoryUIHelper inventoryUiHelper;
 
-        private Item HeldItem
-        {
-            get { return heldItemReflectedField?.GetValue(); }
-        }
+        private Queue<ItemPos> removedItemQueue = new Queue<ItemPos>();
+
 
         public override void Entry(IModHelper helper)
         {
             SaveEvents.AfterLoad += SaveEvents_AfterLoad;
             GameEvents.SecondUpdateTick += GameEventsOnUpdateTick;
-
-            MenuEvents.MenuChanged += MenuEventsOnMenuChanged;
+            
             //GameEvents
             Monitor.Log("Ayy mod loaded");
-        }
-
-        private void MenuEventsOnMenuChanged(object sender, EventArgsClickableMenuChanged eventArgsClickableMenuChanged)
-        {
-            // If the player opens a 
-            if (Game1.activeClickableMenu is GameMenu menu)
-            {
-                var pages = this.Helper.Reflection.GetField<List<IClickableMenu>>(menu, "pages").GetValue();
-                var page = pages[menu.currentTab];
-
-                // Try and get a copy of the inventory page
-                inventoryPage = pages[menu.currentTab] as InventoryPage;
-                heldItemReflectedField = null;
-                
-                // Check if we actually got one
-                if (inventoryPage != null)
-                {
-                    // Save a reference to inventoryPage.heldItem
-                    heldItemReflectedField = Helper.Reflection.GetField<Item>(inventoryPage, "heldItem");
-                    Monitor.Log("Inventory page acquired!");
-                }
-            }
         }
 
         private void SaveEvents_AfterLoad(object sender, EventArgs e)
         {
             inventoryWatcher = new InventoryWatcher(Game1.player.Items);
+            inventoryUiHelper = new InventoryUIHelper(this);
+
+            MenuEvents.MenuChanged += (obj, evnt) =>
+            {
+                inventoryUiHelper.OnMenuChange();
+            };
 
             inventoryWatcher.OnInventoryChange += OnInventoryChanged;
-        }
-
-        private void OnItemRemove(ItemPos item)
-        {
-
         }
 
         private void DumpInventory()
@@ -83,11 +55,6 @@ namespace StardewInventoryTweaks
                 }
             }
         }
-
-        // A dictionary that holds item positions so I can find what location they were removed from
-        
-
-        private Queue<ItemPos> removedItemQueue = new Queue<ItemPos>();
 
         private void OnInventoryChanged()
         {
@@ -107,7 +74,7 @@ namespace StardewInventoryTweaks
         private void HandleRemovedItem(ItemPos itemPos)
         {
             // if the player is holding the item in the UI don't replace it
-            if (HeldItem == itemPos.Item)
+            if (inventoryUiHelper.HeldItem == itemPos.Item)
                 return;
 
             // should always be true but you never know
@@ -157,8 +124,10 @@ namespace StardewInventoryTweaks
 
         private void GameEventsOnUpdateTick(object sender, EventArgs eventArgs)
         {
-            inventoryWatcher?.Update();
-            if(removedItemQueue.Count > 0)
+            inventoryWatcher?.OnUpdate();
+            inventoryUiHelper?.OnUpdate();
+
+            if (removedItemQueue.Count > 0)
                 HandleRemovedItems();
         }
 

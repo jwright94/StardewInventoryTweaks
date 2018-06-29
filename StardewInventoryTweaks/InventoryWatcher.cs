@@ -51,7 +51,7 @@ namespace StardewInventoryTweaks
             movedItems = new List<ItemPos>();
         }
 
-        public void Update()
+        public void OnUpdate()
         {
             // Check for inventory resizing
             if (previousItems.Count != Inventory.Count)
